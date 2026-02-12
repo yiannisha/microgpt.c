@@ -5,10 +5,11 @@
 #include <sys/types.h>
 #include <time.h>
 
+// --- Dataset ---
+
 typedef char** Dataset;
 
 size_t load_dataset(Dataset *dataset, const char *dataset_filepath) {
-    // Implementation for reading dataset
     FILE *f = fopen(dataset_filepath, "r");
     if (!f) {
         // handle missing file error
@@ -27,9 +28,6 @@ size_t load_dataset(Dataset *dataset, const char *dataset_filepath) {
         count++;
     }
 
-    // debug
-    // for (int i=0; i<count; ++i) printf("name: %s\n", lines[i]);
-
     *dataset = lines;
 
     free(line);
@@ -40,7 +38,6 @@ size_t load_dataset(Dataset *dataset, const char *dataset_filepath) {
 
 void shuffle_dataset(Dataset dataset, size_t n) {
     if (n <= 1) return;
-
     size_t i;
     for (i=0; i<n; ++i) {
         size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
@@ -49,6 +46,8 @@ void shuffle_dataset(Dataset dataset, size_t n) {
         dataset[i] = t;
     }
 }
+
+// --- Tokenizer ---
 
 typedef struct {
     char* items;
@@ -68,6 +67,15 @@ void tokenizer_insert(Tokenizer *t, char c) {
     t->items[(int)c] = t->size++;
 }
 
+// --- Autograd ---
+typedef struct {
+    double data;
+    Value* children;
+    double* local_grads;
+} Value;
+
+// --- Main Training/Inference Loop ---
+
 int main() {
     srand( time(NULL) );
 
@@ -75,9 +83,6 @@ int main() {
     const char *path = "input.txt";
     Dataset dataset = NULL;
     size_t size = load_dataset(&dataset, path);
-
-    // debug
-    // for (size_t i=0; i<3; ++i) printf("name: %s\n", dataset[i]);
 
     // 2. shuffle dataset
     shuffle_dataset(dataset, size);
@@ -91,8 +96,8 @@ int main() {
     }
 
     // debug
-    for (int i=0; i<128; i++) printf("%d ", t.items[i]);
-    printf("\n");
+    // for (int i=0; i<128; i++) printf("%d ", t.items[i]);
+    // printf("\n");
 
     free(dataset);
 

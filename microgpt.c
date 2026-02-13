@@ -80,97 +80,95 @@ typedef struct Value {
 } Value;
 
 Value val_from_const(double a) { return (Value){ a, NULL, NULL, 0.0, 0 }; }
+Value val_init(double data, int children_num) {
+    Value out = {data};
+    out.grad = 0.0;
+    out._children_num = children_num;
+
+    out.children = malloc(out._children_num * sizeof(*out.children));
+    out.local_grads = malloc(out._children_num * sizeof(*out.local_grads));
+
+    if (!out.children || !out.children) {
+        perror("Memory allocation failed.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    return out;
+}
 
 // --- Custom Operators for `Value` objects ---
 
 // TODO: these can be minified (single-line)
 Value _add(Value *a, Value *b) {
-    Value *children[] = { a, b };
-    double local_grads[] = { 1.0, 1.0 };
+    Value out = val_init(a->data + b->data, 2);
 
-    Value local = (Value){
-        (*a).data + (*b).data, children, local_grads, 0.0, 2
-    };
+    out.children[0] = a;
+    out.children[1] = b;
+    out.local_grads[0] = 1.0; // d(a+b) / da
+    out.local_grads[1] = 1.0; // d(a+b) / db
 
-    return local;
+    return out;
 }
 
 Value _mul(Value *a, Value *b) {
-    Value *children[] = { a, b };
-    double local_grads[] = { a->data, b->data };
+    Value out = val_init(a->data * b->data, 2);
 
-    Value local = (Value){
-        a->data * b->data, children, local_grads, 0.0, 2
-    };
+    out.children[0] = a;
+    out.children[1] = b;
+    out.local_grads[0] = b->data; // d(a*b) / da
+    out.local_grads[1] = a->data; // d(a*b) / db
 
-    // TODO: if I comment this line it breaks, the addresses changes wtf? does this make not copy (which is what I want to do)?
-    printf("_mul: children[0]: %p, children[1]: %p\n", local.children[0], local.children[1]);
-
-    return local;
+    return out;
 }
 
-Value _pow(Value *a, unsigned int pwr) {
+Value _pow(Value *a, int pwr) {
     double acc = 1.0;
-    for (unsigned int i=0; i<pwr-1; ++i) acc *= a->data;
-    Value *children[] = { a };
-    double local_grads[] = { pwr * acc };
-    Value local = (Value){
-        acc * a->data, children, local_grads, 0.0, 1
-    };
+    for (int i=0; i<pwr-1; ++i) acc *= a->data;
+    
+    Value out = val_init(acc * a->data, 1);
 
-    return local;
+    out.children[0] = a;
+    out.local_grads[0] = pwr * acc; // d(a**pwr) / da
+
+    return out;
 }
 
 Value _log(Value *a) {
-    Value *children[] = { a };
-    double local_grads[] = { 1 / a->data };
+    Value out = val_init(log(a->data), 1);
     
-    Value local = (Value){
-        log(a->data), children, local_grads, 0.0, 1
-    };
+    out.children[0] = a;
+    out.local_grads[0] = 1 / a->data; // d(log(a)) / da
 
-    return local;
+    return out;
 }
 
 Value _exp(Value *a) {
-    Value *children[] = { a };
-    double e = exp(a->data);
-    double local_grads[] = { e };
+    Value out = val_init(exp(a->data), 1);
     
-    Value local = (Value){
-        e, children, local_grads, 0.0, 1
-    };
+    out.children[0] = a;
+    out.local_grads[0] = exp(a->data); // d(exp(a)) / da
 
-    return local;
+    return out;
 }
 
 Value _relu(Value *a) {
-    Value *children[] = { a };
-    double local_grads[] = { a->data > 0 ? 1.0 : 0.0 };
+    Value out = val_init(fmax(a->data, 0), 1);
 
-    Value local = (Value){
-        fmax(a->data, 0), children, local_grads, 0.0, 1
-    };
+    out.children[0] = a;
+    out.local_grads[0] = a->data > 0 ? 1.0 : 0.0;
 
-    return local;
+    return out;
 }
 
-Value _neg(Value *a) {
-    Value v = val_from_const(-1.0);
-    return _mul(a, &v);
+Value _neg(Value a) {
+    Value out = a;
+    out.data = -out.data;
+
+    return out;
 }
 
-Value _sub(Value *a, Value *b) {
-    printf("_sub: a: %p, b: %p\n", a, b);
-    Value n = _neg(b);
-    printf("_sub: n: %p\n", n);
-    return _add(a, &n);
-}
-
-Value _div(Value *a, Value *b) {
-    Value d = _pow(b, -1.0);
-    return _mul(a, &d);
-}
+Value _sub(Value *a, Value *b) {}
+Value _div(Value *a, Value *b) {}
 
 void print_val(Value *a) {
     // parse string of addresses to children
@@ -202,7 +200,10 @@ int main() {
     char *c_ptr = NULL;
     for (size_t i=0; i<size; ++i) {
         c_ptr = dataset[i];
-        while (*(c_ptr++) != '\0') tokenizer_insert(&t, *c_ptr);
+        while (*c_ptr != '\0') {
+            tokenizer_insert(&t, *c_ptr);
+            c_ptr++;
+        }
     }
 
     // debug
@@ -210,18 +211,35 @@ int main() {
     // printf("\n");
 
     Value a = val_from_const(3);
+    printf("a: ");
     print_val(&a);
     Value b = val_from_const(4);
+    printf("b: ");
     print_val(&b);
  
     Value c = _mul(&a, &b);
+    printf("c: ");
     print_val(&c);
 
     Value d = _add(&b, &a);
+    printf("d: ");
     print_val(&d);
 
-    Value f = _sub(&b, &a);
+    Value n = _neg(a);
+    printf("n: ");
+    print_val(&n);
+
+    Value f = _add(&b, &n);
+    printf("f: ");
     print_val(&f);
+
+    Value n2 = _neg(f);
+    printf("n2: ");
+    print_val(&n2);
+
+    Value g = _add(&f, &n2);
+    printf("g: ");
+    print_val(&g);
 
     free(dataset);
 

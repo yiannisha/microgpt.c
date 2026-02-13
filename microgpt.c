@@ -211,6 +211,7 @@ void print_val(Value *a) {
 }
 
 // --- Topological Ordering & Backward ---
+
 void build_topo(Value *a, Value ***topo, int *topo_size) {
     if (a->_visited) return;
     a->_visited = 1;
@@ -242,6 +243,10 @@ void backward(Value *a) {
     }
 }
 
+// --- Model Architecture ---
+typedef double** Matrix;
+Matrix init_matrix(int nout, int nin, float std) {}
+
 // --- Main Training/Inference Loop ---
 
 int main() {
@@ -265,6 +270,13 @@ int main() {
             c_ptr++;
         }
     }
+
+    // 4. init params
+    unsigned int n_embd = 16;                   // embedding dimension
+    unsigned int n_head = 4;                    // number of attention heads
+    unsigned int n_layer = 1;                   // number of layers
+    unsigned int block_size = 8;                // maximum sequence length
+    unsigned int head_dim = n_embd / n_head;    // dimensions of each head
 
     // debug
     // for (int i=0; i<128; i++) printf("%d ", t.items[i]);

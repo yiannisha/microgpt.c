@@ -77,13 +77,15 @@ typedef struct Value {
 
     // readonly metadata
     size_t _children_num;
+    unsigned short int _visited;
 } Value;
 
-Value val_from_const(double a) { return (Value){ a, NULL, NULL, 0.0, 0 }; }
+Value val_from_const(double a) { return (Value){ a, NULL, NULL, 0.0, 0, 0 }; }
 Value val_init(double data, int children_num) {
     Value out = {data};
     out.grad = 0.0;
     out._children_num = children_num;
+    out._visited = 0;
 
     out.children = malloc(out._children_num * sizeof(*out.children));
     out.local_grads = malloc(out._children_num * sizeof(*out.local_grads));
@@ -208,35 +210,36 @@ void print_val(Value *a) {
     printf("Value( data=%f, children={ %s }, grad=%f, address=%p )\n", a->data, buf, a->grad, a);
 }
 
-// --- Topological Ordering & Bacward ---
+// --- Topological Ordering & Backward ---
+void build_topo(Value *a, Value ***topo, int *topo_size) {
+    if (a->_visited) return;
+    a->_visited = 1;
+
+    if (a->_children_num)
+        for (int i=0; i<a->_children_num; ++i) build_topo(a->children[i], topo, topo_size);
+
+    Value **tmp = realloc(*topo, ((*topo_size + 1) * sizeof(**topo)));
+    *topo = tmp;
+    (*topo)[*topo_size] = a;
+    (*topo_size)++;
+}
+
 void backward(Value *a) {
     a->grad = 1.0;
-    
-    if (a->children == NULL) {
-        return;
-    }
-    
-    // topo ordering
-    size_t topo_size = a->_children_num + 1;
-    Value **topo = (Value *)malloc(topo_size * sizeof(Value *));
-    topo[0] = a->children[0];
-    topo[1] = a->children[1];
-    topo[2] = a;
 
-    // debug
-    // printf("topo:\n");
+    if (!a->_children_num) return;
+
+    // topological ordering
+    Value **topo = NULL;
+    size_t topo_size = 0;
+    build_topo(a, &topo, &topo_size);
+
     for (int j=0; j < topo_size; ++j) {
         Value *v = topo[j];
-        // debug
-        // print_val(v);
-
-        for (int i=0; i < v->_children_num; ++i) {
-            v->children[i]->grad += v->local_grads[i] * v->grad;
-            // debug
-            // printf("child: %p, new grad: %f\n", v->children[i], v->children[i]->grad);
-        }
+        for (int i=0; i < v->_children_num; ++i) v->children[i]->grad += v->local_grads[i] * v->grad;
+        // reset _visited
+        v->_visited = 0;
     }
-    // printf("\n");
 }
 
 // --- Main Training/Inference Loop ---
@@ -266,59 +269,7 @@ int main() {
     // debug
     // for (int i=0; i<128; i++) printf("%d ", t.items[i]);
     // printf("\n");
-
-    Value a = val_from_const(3);
-    printf("a: ");
-    print_val(&a);
-    Value b = val_from_const(4);
-    printf("b: ");
-    print_val(&b);
- 
-    Value c = _mul(&a, &b);
-    printf("c: ");
-    print_val(&c);
-
-    Value d = _add(&b, &a);
-    printf("d: ");
-    print_val(&d);
-
-    Value n = _neg(a);
-    printf("n: ");
-    print_val(&n);
-
-    Value f = _add(&b, &n);
-    printf("f: ");
-    print_val(&f);
-
-    Value n2 = _neg(f);
-    printf("n2: ");
-    print_val(&n2);
-
-    Value g = _add(&f, &n2);
-    printf("g: ");
-    print_val(&g);
-
-    Value h = _sub(&b, &a);
-    printf("h: ");
-    print_val(&h);
-
-    Value i = _div(&b, &a);
-    printf("i: ");
-    print_val(&i);
     
-    printf("\n");
-    backward(&c);
-    printf("c: "); print_val(&c);
-    printf("a: "); print_val(&a);
-    printf("b: "); print_val(&b);
-
-    printf("\n");
-    backward(&h);
-    printf("h: "); print_val(&h);
-    printf("a: "); print_val(&a);
-    printf("b: "); print_val(&b);
-
-
     free(dataset);
 
     return EXIT_SUCCESS;

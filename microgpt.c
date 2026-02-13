@@ -167,8 +167,34 @@ Value _neg(Value a) {
     return out;
 }
 
-Value _sub(Value *a, Value *b) {}
-Value _div(Value *a, Value *b) {}
+// TODO: minify using _add and _neg
+Value _sub(Value *a, Value *b) {
+    Value out = val_init(a->data - b->data, 2);
+
+    out.children[0] = a;
+    out.children[1] = b;
+    out.local_grads[0] = 1.0; // d(a-b) / da
+    out.local_grads[1] = -1.0; // d(a-b) / db
+
+    return out;
+}
+
+// TODO: minify using _mul and _neg
+Value _div(Value *a, Value *b) {
+    if (!b->data) {
+        perror("Division with zero.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    Value out = val_init(a->data / b->data, 2);
+
+    out.children[0] = a;
+    out.children[1] = b;
+    out.local_grads[0] = 1 / b->data; // d(a/b) / da
+    out.local_grads[1] =  - a->data / (b->data * b->data); // d(a/b) / db
+
+    return out;
+}
 
 void print_val(Value *a) {
     // parse string of addresses to children
@@ -240,6 +266,14 @@ int main() {
     Value g = _add(&f, &n2);
     printf("g: ");
     print_val(&g);
+
+    Value h = _sub(&b, &a);
+    printf("h: ");
+    print_val(&h);
+
+    Value i = _div(&b, &a);
+    printf("i: ");
+    print_val(&i);
 
     free(dataset);
 

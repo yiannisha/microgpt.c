@@ -208,6 +208,37 @@ void print_val(Value *a) {
     printf("Value( data=%f, children={ %s }, grad=%f, address=%p )\n", a->data, buf, a->grad, a);
 }
 
+// --- Topological Ordering & Bacward ---
+void backward(Value *a) {
+    a->grad = 1.0;
+    
+    if (a->children == NULL) {
+        return;
+    }
+    
+    // topo ordering
+    size_t topo_size = a->_children_num + 1;
+    Value **topo = (Value *)malloc(topo_size * sizeof(Value *));
+    topo[0] = a->children[0];
+    topo[1] = a->children[1];
+    topo[2] = a;
+
+    // debug
+    // printf("topo:\n");
+    for (int j=0; j < topo_size; ++j) {
+        Value *v = topo[j];
+        // debug
+        // print_val(v);
+
+        for (int i=0; i < v->_children_num; ++i) {
+            v->children[i]->grad += v->local_grads[i] * v->grad;
+            // debug
+            // printf("child: %p, new grad: %f\n", v->children[i], v->children[i]->grad);
+        }
+    }
+    // printf("\n");
+}
+
 // --- Main Training/Inference Loop ---
 
 int main() {
@@ -274,6 +305,19 @@ int main() {
     Value i = _div(&b, &a);
     printf("i: ");
     print_val(&i);
+    
+    printf("\n");
+    backward(&c);
+    printf("c: "); print_val(&c);
+    printf("a: "); print_val(&a);
+    printf("b: "); print_val(&b);
+
+    printf("\n");
+    backward(&h);
+    printf("h: "); print_val(&h);
+    printf("a: "); print_val(&a);
+    printf("b: "); print_val(&b);
+
 
     free(dataset);
 

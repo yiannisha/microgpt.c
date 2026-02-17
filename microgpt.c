@@ -6,6 +6,18 @@
 #include <time.h>
 #include <math.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+// --- Random Number Generation ---
+
+double drand() { return (rand() + 1.0) / (RAND_MAX + 1.0); }
+
+double random_normal() { return sqrt(-2*log(drand())) * cos(2 * M_PI * drand() ); }
+
+double random_gaussian(double mean, double std) { return mean + std * random_normal(); }
+
 // --- Dataset ---
 
 typedef char** Dataset;
@@ -63,7 +75,7 @@ Tokenizer tokenizer_init() {
 }
 
 void tokenizer_insert(Tokenizer *t, char c) {
-    if (c < 20 || c > 126) return; // keep only "normal" characters
+    if (c < 20 || c > 126) return; // keep only "normal" ASCII characters
     if (t->items[(int)c] >= 0) return; // token id already allocated
     t->items[(int)c] = t->size++;
 }
@@ -244,8 +256,83 @@ void backward(Value *a) {
 }
 
 // --- Model Architecture ---
-typedef double** Matrix;
+
+#define N_EMBD 16
+#define N_HEAD 4
+#define N_LAYER 1
+#define BLOCK_SIZE 8
+#define HEAD_DIM (N_EMBD / N_HEAD)
+
+typedef Value** Matrix;
 Matrix init_matrix(int nout, int nin, float std) {}
+
+typedef struct Layer {
+    Matrix attn_wq;     //
+    Matrix attn_wk;     //
+    Matrix attn_wv;     //
+    Matrix attn_wo;     //
+    Matrix mlp_fc1;     //
+    Matrix mlp_fc2;     //
+} Layer;
+
+Layer init_layer() {
+    Layer l = {};
+    l.attn_wq = init_matrix(N_EMBD, N_EMBD, 0.02);
+    l.attn_wk = init_matrix(N_EMBD, N_EMBD, 0.02);
+    l.attn_wv = init_matrix(N_EMBD, N_EMBD, 0.02);
+    l.attn_wv = init_matrix(N_EMBD, N_EMBD, 0.);
+    l.attn_wo = init_matrix(4 * N_EMBD, N_EMBD, 0.02);
+    l.mlp_fc1 = init_matrix(N_EMBD, 4 * N_EMBD, 0.0);
+
+    return l;
+}
+
+typedef struct StateDict {
+    Matrix wte;         // 
+    Matrix wpe;         // 
+    Matrix lm_head;     // 
+
+    Layer *layers;      //
+
+    // --- metadata ---
+    int param_num;
+} StateDict;
+
+StateDict init_state_dict(int vocab_size) {
+    StateDict sd = {};
+    sd.wte = init_matrix(vocab_size, N_EMBD, 0.02);
+    sd.wpe = init_matrix(BLOCK_SIZE, N_EMBD, 0.02);
+    sd.lm_head = init_matrix(vocab_size, N_EMBD, 0.02);
+    sd.layers = malloc(N_LAYER * sizeof(Layer));
+
+    for (int i=0; i < N_LAYER; i++) sd.layers[i] = init_layer();
+
+    sd.param_num =  vocab_size * N_EMBD +
+                    BLOCK_SIZE * N_EMBD + 
+                    vocab_size * N_EMBD +
+                    N_LAYER * (
+                        4 * (N_EMBD * N_EMBD) +
+                        (4 * N_EMBD) * N_EMBD +
+                        N_EMBD * (N_EMBD * 4)
+                    );
+
+    return sd;
+}
+
+// GPT-2 arch w/ minor differences: layernorm -> rmsnorm, no biases, GeLU -> ReLU^2
+Value* linear(Value *x, Matrix w) {
+    // for (int i=0; i < w.)
+    // _mul()
+}
+
+// Value out = val_init(a->data + b->data, 2);
+
+// out.children[0] = a;
+// out.children[1] = b;
+// out.local_grads[0] = 1.0; // d(a+b) / da
+// out.local_grads[1] = 1.0; // d(a+b) / db
+
+// return out;
 
 // --- Main Training/Inference Loop ---
 
@@ -272,17 +359,25 @@ int main() {
     }
 
     // 4. init params
-    unsigned int n_embd = 16;                   // embedding dimension
-    unsigned int n_head = 4;                    // number of attention heads
-    unsigned int n_layer = 1;                   // number of layers
-    unsigned int block_size = 8;                // maximum sequence length
-    unsigned int head_dim = n_embd / n_head;    // dimensions of each head
+    double **a = init_dmatrix(5, 5);
+    printf("%d, ", a[0][0]);
+
+    for (int i = 0; i < 5; i++)
+        for (int j = 0; j < 5; j++)
+            printf("%d, ", a[i][j]);
+
+    // Value *m = init_matrix(5, 5, 1.0);
+    // for (int i=0; i<5; i++)
+    //     printf("%d, ", m[i].data);
+    // printf("\n");
 
     // debug
     // for (int i=0; i<128; i++) printf("%d ", t.items[i]);
     // printf("\n");
-    
+
     free(dataset);
+
+    printf("\n");
 
     return EXIT_SUCCESS;
 }

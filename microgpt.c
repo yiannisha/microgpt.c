@@ -263,8 +263,36 @@ void backward(Value *a) {
 #define BLOCK_SIZE 8
 #define HEAD_DIM (N_EMBD / N_HEAD)
 
-typedef Value** Matrix;
-Matrix init_matrix(int nout, int nin, float std) {}
+typedef struct Matrix {
+    Value **data;
+    
+    // --- metadata ---
+    int nout;
+    int nin;
+} Matrix;
+
+Matrix init_matrix(int nout, int nin, float std) {
+    Matrix m = {};
+    m.nout = nout;
+    m.nin = nin;
+    m.data = malloc(nout * sizeof(Value *));
+    for (int i=0; i < nout; ++i) {
+        m.data[i] = malloc(nin * sizeof(Value));
+        for (int j=0; j < nin; ++j) m.data[i][j] = val_from_const(random_gaussian(0.0, std));
+    }
+    return m;
+}
+
+void print_matrix(Matrix m) {
+    printf("[\n");
+    for (int i = 0; i < m.nout; ++i) {
+        printf("\t");
+        for (int j = 0; j < m.nin; ++j)
+            printf("%f, ", m.data[i][j].data);
+        printf("\n");
+    }
+    printf("]\n");
+}
 
 typedef struct Layer {
     Matrix attn_wq;     //
@@ -321,18 +349,18 @@ StateDict init_state_dict(int vocab_size) {
 
 // GPT-2 arch w/ minor differences: layernorm -> rmsnorm, no biases, GeLU -> ReLU^2
 Value* linear(Value *x, Matrix w) {
-    // for (int i=0; i < w.)
-    // _mul()
+    // for now, assume sizes are vector/matrix sizes are ok
+    Value *out = malloc(w.nout * sizeof(Value));
+    for (int i=0; i < w.nout; ++i) {
+        out[i] = val_from_const(0.0);
+        for (int j=0; j < w.nin; ++j) {
+            Value t = _mul(&w.data[i][j], &x[j]);
+            out[i] = _add(&out[i], &t);
+        }
+    }
+
+    return out;
 }
-
-// Value out = val_init(a->data + b->data, 2);
-
-// out.children[0] = a;
-// out.children[1] = b;
-// out.local_grads[0] = 1.0; // d(a+b) / da
-// out.local_grads[1] = 1.0; // d(a+b) / db
-
-// return out;
 
 // --- Main Training/Inference Loop ---
 
@@ -359,17 +387,22 @@ int main() {
     }
 
     // 4. init params
-    double **a = init_dmatrix(5, 5);
-    printf("%d, ", a[0][0]);
+    // int vocab_size = t.size;
+    // StateDict sd = init_state_dict(vocab_size);
 
-    for (int i = 0; i < 5; i++)
-        for (int j = 0; j < 5; j++)
-            printf("%d, ", a[i][j]);
+    int nin=2, nout=5;
+    Value *x = malloc(nin * sizeof(Value));
+    for (int i=0; i<nin; ++i) {
+        x[i] = val_from_const((double)i);
 
-    // Value *m = init_matrix(5, 5, 1.0);
-    // for (int i=0; i<5; i++)
-    //     printf("%d, ", m[i].data);
-    // printf("\n");
+        print_val(&x[i]);
+    }
+
+    Matrix m = init_matrix(nout, nin, 0.1);
+    print_matrix(m);
+
+    Value *l = linear(x, m);
+    for (int i=0; i < nin; ++i) print_val(&l[i]);
 
     // debug
     // for (int i=0; i<128; i++) printf("%d ", t.items[i]);

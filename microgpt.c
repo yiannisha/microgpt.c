@@ -390,14 +390,6 @@ int main() {
     // int vocab_size = t.size;
     // StateDict sd = init_state_dict(vocab_size);
 
-    int nin=2, nout=5;
-    Value *x = malloc(nin * sizeof(Value));
-    for (int i=0; i<nin; ++i) {
-        x[i] = val_from_const((double)i);
-
-        print_val(&x[i]);
-    }
-
     Matrix m = init_matrix(nout, nin, 0.1);
     print_matrix(m);
 
